@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Retro Car Game</title>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    canvas { display: block; }
+    #menu {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background: rgba(0, 0, 0, 0.7);
+      color: white;
+      padding: 10px;
+      border-radius: 10px;
+      z-index: 10;
+    }
+    #shop {
+      position: absolute;
+      top: 120px;
+      left: 20px;
+      background: rgba(0, 0, 0, 0.7);
+      color: white;
+      padding: 10px;
+      border-radius: 10px;
+      z-index: 10;
+      display: none;
+    }
+    button { margin: 5px; padding: 10px; font-size: 14px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div id="menu">
+    <button id="startBtn">Start Game</button>
+    <button id="shopBtn">Shop</button>
+    <div id="currency">Astral Plates: <span id="ap">0</span> Ap</div>
+  </div>
+
+  <div id="shop">
+    <div><strong>Buy Cars:</strong></div>
+    <button data-type="ferrari" data-cost="50">Ferrari (50 Ap)</button><br>
+    <button data-type="porsche" data-cost="75">Porsche (75 Ap)</button><br>
+    <button data-type="lamborghini" data-cost="100">Lamborghini (100 Ap)</button>
+  </div>
+
+  <audio id="coinSound" src="https://freesound.org/data/previews/341/341695_6262414-lq.mp3"></audio>
+  <audio id="crashSound" src="https://freesound.org/data/previews/108/108855_861714-lq.mp3"></audio>
+  <audio id="engineSound" src="https://freesound.org/data/previews/240/240776_3905080-lq.mp3" loop></audio>
+
+  <script type="module">
+    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.module.js';
+    import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/loaders/GLTFLoader.js';
+
+    let scene, camera, renderer, car, ap = 0;
+    let coins = [], obstacles = [];
+    let carsOwned = { ferrari: true, porsche: false, lamborghini: false };
+    let engineSound = document.getElementById('engineSound');
+
+    init();
+
+    function init() {
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+      renderer = new THREE.WebGLRenderer();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      document.body.appendChild(renderer.domElement);
+
+      const light = new THREE.DirectionalLight(0xffffff, 1);
+      light.position.set(0, 1, 1);
+      scene.add(light);
+
+      const planeGeometry = new THREE.PlaneGeometry(200, 200);
+      const planeMaterial = new THREE.MeshStandardMaterial({ color: 0x333333 });
+      const plane = new THREE.Mesh(planeGeometry, planeMaterial);
+      plane.rotation.x = -Math.PI / 2;
+      scene.add(plane);
+
+      camera.position.set(0, 2, 5);
+      camera.lookAt(0, 0, 0);
+
+      loadCar('ferrari');
+      createCoins();
+      createObstacles();
+      animate();
+    }
+
+    function loadCar(type) {
+      if (car) scene.remove(car);
+
+      const loader = new GLTFLoader();
+      let modelURL = '';
+      if (type === 'ferrari') modelURL = 'https://modelviewer.dev/shared-assets/models/Ferrari.glb';
+      else if (type === 'porsche') modelURL = 'https://modelviewer.dev/shared-assets/models/Porsche.glb';
+      else if (type === 'lamborghini') modelURL = 'https://modelviewer.dev/shared-assets/models/Lamborghini.glb';
+
+      loader.load(modelURL, function(gltf) {
+        car = gltf.scene;
+        car.scale.set(0.5, 0.5, 0.5);
+        car.position.set(0, 0, 0);
+        scene.add(car);
+      });
+    }
+
+    function createCoins() {
+      const coinGeometry = new THREE.CylinderGeometry(0.2, 0.2, 0.05, 32);
+      const coinMaterial = new THREE.MeshStandardMaterial({ color: 0xffd700 });
+      for (let i = 0; i < 10; i++) {
+        const coin = new THREE.Mesh(coinGeometry, coinMaterial);
+        coin.rotation.x = Math.PI / 2;
+        coin.position.set(Math.random() * 4 - 2, 0.1, -10 - i * 10);
+        coins.push(coin);
+        scene.add(coin);
+      }
+    }
+
+    function createObstacles() {
+      const obsGeometry = new THREE.BoxGeometry(1, 1, 1);
+      const obsMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+      for (let i = 0; i < 5; i++) {
+        const obs = new THREE.Mesh(obsGeometry, obsMaterial);
+        obs.position.set(Math.random() * 4 - 2, 0.5, -15 - i * 15);
+        obstacles.push(obs);
+        scene.add(obs);
+      }
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      if (car) {
+        car.position.z -= 0.1;
+        checkCoinCollision();
+        checkObstacleCollision();
+      }
+      renderer.render(scene, camera);
+    }
+
+    function checkCoinCollision() {
+      coins.forEach((coin, index) => {
+        if (car.position.distanceTo(coin.position) < 1) {
+          document.getElementById('coinSound').play();
+          scene.remove(coin);
+          coins.splice(index, 1);
+          ap += 5;
+          document.getElementById('ap').textContent = ap;
+        }
+      });
+    }
+
+    function checkObstacleCollision() {
+      obstacles.forEach(obs => {
+        if (car.position.distanceTo(obs.position) < 1.5) {
+          document.getElementById('crashSound').play();
+          engineSound.pause();
+          alert('Kamu menabrak! Game Over!');
+          location.reload();
+        }
+      });
+    }
+
+    document.getElementById('startBtn').addEventListener('click', () => {
+      ap += 10;
+      document.getElementById('ap').textContent = ap;
+      engineSound.play();
+    });
+
+    document.getElementById('shopBtn').addEventListener('click', () => {
+      const shop = document.getElementById('shop');
+      shop.style.display = shop.style.display === 'none' ? 'block' : 'none';
+    });
+
+    document.querySelectorAll('#shop button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const type = btn.dataset.type;
+        const cost = parseInt(btn.dataset.cost);
+        if (ap >= cost) {
+          ap -= cost;
+          carsOwned[type] = true;
+          document.getElementById('ap').textContent = ap;
+          loadCar(type);
+          alert(type.charAt(0).toUpperCase() + type.slice(1) + ' purchased!');
+        } else {
+          alert('Not enough Ap!');
+        }
+      });
+    });
+  </script>
+</body>
+</html>
